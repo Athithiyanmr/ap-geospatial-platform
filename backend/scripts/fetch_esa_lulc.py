@@ -1,66 +1,68 @@
 """
-Fetch ESA WorldCover 2021 (v200) for Andhra Pradesh
-via Microsoft Planetary Computer STAC API.
+Step 3: Fetch ESA WorldCover 2021 LULC clipped to your AOI
 
-Outputs: backend/data/lulc_esa.geojson
-  — Vectorised polygons per LULC class, clipped to AP boundary.
+Reads: backend/data/aoi_config.json  (created by convert_shapefiles.py)
+       backend/data/aoi_boundary.geojson
+Outputs:
+  backend/data/lulc_esa.geojson
 
 Usage:
-  pip install pystac-client planetary-computer rioxarray rasterio geopandas
   python backend/scripts/fetch_esa_lulc.py
 
-Note: For large states, the raster-to-vector step can take 5-15 minutes.
-Alternative: Use gee_export_lulc.js to export from Google Earth Engine.
+Note: Downloads COG tiles from Microsoft Planetary Computer (free, no API key).
+      For Kadapa district, this takes ~3-5 minutes.
 """
 
-import os
 import json
+import sys
+import os
+import tempfile
+import urllib.request
 from pathlib import Path
 
 import numpy as np
 import rasterio
-from rasterio.merge import merge
-from rasterio.mask import mask as rasterio_mask
+from rasterio.merge import merge as rasterio_merge
 from rasterio.features import shapes
 import geopandas as gpd
 from shapely.geometry import shape, mapping
 import pystac_client
 import planetary_computer
 
-OUTPUT = Path(__file__).parent.parent / "data"
-BOUNDARY_FILE = OUTPUT / "ap_boundary.geojson"
-OUT_FILE = OUTPUT / "lulc_esa.geojson"
-
-# AP bounding box [west, south, east, north]
-AP_BBOX = [76.7, 12.6, 84.8, 19.9]
+DATA_DIR    = Path(__file__).parent.parent / "data"
+CONFIG_FILE = DATA_DIR / "aoi_config.json"
+BOUNDARY_FILE = DATA_DIR / "aoi_boundary.geojson"
+OUT_FILE    = DATA_DIR / "lulc_esa.geojson"
 
 ESA_CLASSES = {
-    10: {"label": "Tree cover",            "color": "#006400"},
-    20: {"label": "Shrubland",              "color": "#ffbb22"},
-    30: {"label": "Grassland",              "color": "#ffff4c"},
-    40: {"label": "Cropland",               "color": "#f096ff"},
-    50: {"label": "Built-up",               "color": "#fa0000"},
-    60: {"label": "Bare / sparse veg",      "color": "#b4b4b4"},
-    70: {"label": "Snow and ice",           "color": "#f0f0f0"},
-    80: {"label": "Water bodies",           "color": "#0064c8"},
-    90: {"label": "Herbaceous wetland",     "color": "#0096a0"},
-    95: {"label": "Mangroves",              "color": "#00cf75"},
-    100:{"label": "Moss and lichen",        "color": "#fae6a0"},
+    10:  {"label": "Tree cover",           "color": "#006400"},
+    20:  {"label": "Shrubland",             "color": "#ffbb22"},
+    30:  {"label": "Grassland",             "color": "#ffff4c"},
+    40:  {"label": "Cropland",              "color": "#f096ff"},
+    50:  {"label": "Built-up",              "color": "#fa0000"},
+    60:  {"label": "Bare / sparse veg",     "color": "#b4b4b4"},
+    80:  {"label": "Water bodies",          "color": "#0064c8"},
+    90:  {"label": "Herbaceous wetland",    "color": "#0096a0"},
+    95:  {"label": "Mangroves",             "color": "#00cf75"},
 }
 
 
-def get_ap_geometry():
-    """Load AP boundary geometry for masking."""
-    if not BOUNDARY_FILE.exists():
-        raise FileNotFoundError(
-            "ap_boundary.geojson not found. Run fetch_osm_data.py first."
-        )
-    gdf = gpd.read_file(str(BOUNDARY_FILE))
-    return [mapping(geom) for geom in gdf.geometry]
+def load_config() -> dict:
+    if not CONFIG_FILE.exists():
+        print("❌ aoi_config.json not found.")
+        print("   Run first: python backend/scripts/convert_shapefiles.py")
+        sys.exit(1)
+    with open(CONFIG_FILE) as f:
+        return json.load(f)
 
 
-def fetch_tiles():
-    """Search and sign ESA WorldCover tiles from Planetary Computer."""
+def load_aoi_geometry():
+    gdf = gpd.read_file(str(BOUNDARY_FILE)).to_crs("EPSG:4326")
+    return [mapping(geom) for geom in gdf.geometry], gdf
+
+
+def fetch_tiles(bbox: list):
+    """Search ESA WorldCover tiles intersecting the AOI bbox."""
     print("  Connecting to Planetary Computer STAC...")
     catalog = pystac_client.Client.open(
         "https://planetarycomputer.microsoft.com/api/stac/v1",
@@ -68,46 +70,51 @@ def fetch_tiles():
     )
     search = catalog.search(
         collections=["esa-worldcover"],
-        bbox=AP_BBOX,
+        bbox=bbox,   # [W, S, E, N]
     )
     items = list(search.items())
-    print(f"  Found {len(items)} ESA WorldCover tile(s)")
+    print(f"  Found {len(items)} ESA WorldCover tile(s) for AOI")
+    if not items:
+        print("  ❌ No tiles found. Check your bbox.")
+        sys.exit(1)
     return items
 
 
-def download_and_merge(items):
-    """Download COG tiles, merge into single raster clipped to AP."""
-    import urllib.request, tempfile
-
-    ap_geoms = get_ap_geometry()
-    src_files = []
+def download_and_clip(items, bbox: list, aoi_geoms: list):
+    """Download tiles, merge, clip to AOI bbox."""
     tmp_files = []
+    src_files = []
 
     for item in items:
         href = item.assets["map"].href
         tmp = tempfile.NamedTemporaryFile(suffix=".tif", delete=False)
         tmp_files.append(tmp.name)
-        print(f"  Downloading tile: {item.id} ...")
+        tmp.close()
+        print(f"  ⬇️  Downloading: {item.id}")
         urllib.request.urlretrieve(href, tmp.name)
         src_files.append(rasterio.open(tmp.name))
 
-    # Merge all tiles
     print("  Merging tiles...")
-    merged_data, merged_transform = merge(src_files, bounds=(
-        AP_BBOX[0], AP_BBOX[1], AP_BBOX[2], AP_BBOX[3]
-    ))
-    merged_crs = src_files[0].crs
+    merged_data, merged_transform = rasterio_merge(
+        src_files,
+        bounds=(bbox[0], bbox[1], bbox[2], bbox[3])   # W, S, E, N
+    )
+    crs = src_files[0].crs
 
-    # Close file handles
     for src in src_files:
         src.close()
+    for f in tmp_files:
+        try:
+            os.unlink(f)
+        except Exception:
+            pass
 
-    return merged_data[0], merged_transform, merged_crs, ap_geoms, tmp_files
+    return merged_data[0], merged_transform, crs
 
 
-def vectorise(data, transform, crs):
-    """Convert raster to vector polygons grouped by LULC class."""
-    print("  Vectorising raster to polygons (this may take a few minutes)...")
+def vectorise_and_clip(data, transform, crs, aoi_gdf):
+    """Raster → vector polygons, clip to AOI, dissolve by class."""
+    print("  Vectorising raster (this takes 2-5 min for district scale)...")
     features = []
     mask_arr = data != 0
 
@@ -124,17 +131,21 @@ def vectorise(data, transform, crs):
                 },
             })
 
-    print(f"  Generated {len(features)} polygon features")
-    return features
+    print(f"  Raw polygons generated: {len(features)}")
 
-
-def simplify_and_save(features, crs):
-    """Dissolve by class, simplify for web, save GeoJSON."""
-    print("  Simplifying and dissolving by class...")
+    # Convert to GeoDataFrame
     gdf = gpd.GeoDataFrame.from_features(features, crs=crs)
     gdf = gdf.to_crs("EPSG:4326")
 
-    # Dissolve per class to reduce feature count
+    # Clip strictly to AOI polygon
+    print("  Clipping to AOI boundary...")
+    aoi_union = aoi_gdf.geometry.union_all()
+    gdf = gdf[gdf.geometry.intersects(aoi_union)].copy()
+    gdf["geometry"] = gdf["geometry"].intersection(aoi_union)
+    gdf = gdf[~gdf.geometry.is_empty].copy()
+
+    # Dissolve per class
+    print("  Dissolving by LULC class...")
     gdf_dissolved = gdf.dissolve(by="class_value").reset_index()
     gdf_dissolved["class_label"] = gdf_dissolved["class_value"].map(
         lambda v: ESA_CLASSES.get(v, {}).get("label", "Unknown")
@@ -143,33 +154,43 @@ def simplify_and_save(features, crs):
         lambda v: ESA_CLASSES.get(v, {}).get("color", "#888888")
     )
 
-    # Simplify geometry for web display (~500 m tolerance)
+    # Simplify for web display
     gdf_dissolved["geometry"] = gdf_dissolved["geometry"].simplify(
-        tolerance=0.005, preserve_topology=True
+        tolerance=0.001, preserve_topology=True
     )
     gdf_dissolved = gdf_dissolved[~gdf_dissolved.geometry.is_empty]
 
-    gdf_dissolved.to_file(str(OUT_FILE), driver="GeoJSON")
-    size_kb = round(OUT_FILE.stat().st_size / 1024, 1)
-    print(f"  ✅ Saved {len(gdf_dissolved)} LULC class polygons — {size_kb} KB → lulc_esa.geojson")
+    return gdf_dissolved
 
 
 if __name__ == "__main__":
-    print("═" * 50)
-    print("  ESA WorldCover Fetcher (Andhra Pradesh)")
-    print("═" * 50)
+    print("=" * 50)
+    print("  ESA WorldCover Fetcher — AOI Clipped")
+    print("=" * 50)
 
-    items = fetch_tiles()
-    data, transform, crs, ap_geoms, tmp_files = download_and_merge(items)
-    features = vectorise(data, transform, crs)
-    simplify_and_save(features, crs)
+    cfg = load_config()
+    bbox = cfg["bbox"]   # [W, S, E, N]
+    print(f"  AOI : {cfg['name']}")
+    print(f"  BBox: {bbox}")
 
-    # Cleanup temp files
-    import os
-    for f in tmp_files:
-        try:
-            os.unlink(f)
-        except Exception:
-            pass
+    aoi_geoms, aoi_gdf = load_aoi_geometry()
 
-    print("\n🎉 ESA LULC data ready!")
+    print("\n[1/3] Searching ESA WorldCover tiles...")
+    items = fetch_tiles(bbox)
+
+    print("\n[2/3] Downloading & merging tiles...")
+    data, transform, crs = download_and_clip(items, bbox, aoi_geoms)
+
+    print("\n[3/3] Vectorising & clipping to AOI...")
+    gdf_final = vectorise_and_clip(data, transform, crs, aoi_gdf)
+
+    gdf_final.to_file(str(OUT_FILE), driver="GeoJSON")
+    size_kb = round(OUT_FILE.stat().st_size / 1024, 1)
+    print(f"\n  ✅ {len(gdf_final)} LULC classes → lulc_esa.geojson ({size_kb} KB)")
+
+    print("\n  LULC class breakdown:")
+    for _, row in gdf_final.iterrows():
+        print(f"    [{row['class_value']:>3}] {row['class_label']}")
+
+    print(f"\n🎉 ESA LULC ready for {cfg['name']}!")
+    print("   Next: docker-compose up --build")

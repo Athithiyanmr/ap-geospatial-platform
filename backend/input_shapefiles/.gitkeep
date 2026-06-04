@@ -1,0 +1,8 @@
+# Place your AOI shapefile here:
+#   *.shp
+#   *.shx
+#   *.dbf
+#   *.prj  (required for CRS detection)
+#
+# Then run:
+#   python backend/scripts/convert_shapefiles.py

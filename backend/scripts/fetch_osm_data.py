@@ -1,116 +1,131 @@
 """
-Fetch Andhra Pradesh OSM data:
-  - State boundary
-  - District boundaries (admin_level=5)
-  - Power transmission lines
-  - Substations
-  - Major roads (motorway, trunk, primary, secondary)
+Step 2: Fetch OSM data clipped to your AOI (Kadapa district)
+
+Reads: backend/data/aoi_config.json  (created by convert_shapefiles.py)
+Outputs:
+  backend/data/aoi_boundary.geojson   (already exists)
+  backend/data/power_lines.geojson
+  backend/data/substations.geojson
+  backend/data/roads.geojson
 
 Usage:
-  pip install osmnx geopandas shapely
   python backend/scripts/fetch_osm_data.py
 """
 
-import os
 import json
+import sys
 from pathlib import Path
 
 import geopandas as gpd
 import osmnx as ox
-from shapely.geometry import mapping
+from shapely.geometry import box
 
-OUTPUT = Path(__file__).parent.parent / "data"
-OUTPUT.mkdir(exist_ok=True)
+DATA_DIR = Path(__file__).parent.parent / "data"
+CONFIG_FILE = DATA_DIR / "aoi_config.json"
+BOUNDARY_FILE = DATA_DIR / "aoi_boundary.geojson"
 
-PLACE = "Andhra Pradesh, India"
+
+def load_config() -> dict:
+    if not CONFIG_FILE.exists():
+        print("❌ aoi_config.json not found.")
+        print("   Run first: python backend/scripts/convert_shapefiles.py")
+        sys.exit(1)
+    with open(CONFIG_FILE) as f:
+        cfg = json.load(f)
+    print(f"  AOI     : {cfg['name']}")
+    print(f"  BBox    : {cfg['bbox']}")
+    return cfg
+
+
+def load_aoi_geometry():
+    """Load the AOI polygon for spatial clipping."""
+    gdf = gpd.read_file(str(BOUNDARY_FILE))
+    return gdf.geometry.union_all()   # single shapely geometry
+
+
+def bbox_to_osmnx(bbox: list) -> tuple:
+    """Convert [W, S, E, N] → osmnx (N, S, E, W) tuple."""
+    return (bbox[3], bbox[1], bbox[2], bbox[0])
 
 
 def save_geojson(gdf: gpd.GeoDataFrame, filename: str, label: str):
-    """Simplify, drop nulls, save as GeoJSON."""
     gdf = gdf.copy()
-    # Simplify geometry for web display (tolerance ~100 m at equator)
-    gdf["geometry"] = gdf["geometry"].simplify(tolerance=0.001, preserve_topology=True)
-    gdf = gdf[~gdf.geometry.is_empty]
     gdf = gdf.to_crs("EPSG:4326")
-    out_path = OUTPUT / filename
-    gdf.to_file(str(out_path), driver="GeoJSON")
-    size_kb = round(out_path.stat().st_size / 1024, 1)
-    print(f"  ✅ {label}: {len(gdf)} features — {size_kb} KB → {filename}")
+    gdf["geometry"] = gdf["geometry"].simplify(tolerance=0.0005, preserve_topology=True)
+    gdf = gdf[~gdf.geometry.is_empty & gdf.geometry.notna()]
+    out = DATA_DIR / filename
+    gdf.to_file(str(out), driver="GeoJSON")
+    size_kb = round(out.stat().st_size / 1024, 1)
+    print(f"  ✅ {label}: {len(gdf)} features → {filename} ({size_kb} KB)")
 
 
-def fetch_state_boundary():
-    print("\n[1/5] Fetching AP state boundary...")
-    gdf = ox.geocode_to_gdf(PLACE)
-    gdf = gdf[["display_name", "geometry"]]
-    gdf["name"] = "Andhra Pradesh"
-    save_geojson(gdf, "ap_boundary.geojson", "State boundary")
-
-
-def fetch_districts():
-    print("\n[2/5] Fetching district boundaries (admin_level=5)...")
-    tags = {"admin_level": "5", "boundary": "administrative"}
-    gdf = ox.features_from_place(PLACE, tags=tags)
-    gdf = gdf[gdf.geometry.geom_type.isin(["Polygon", "MultiPolygon"])].copy()
-    # Keep useful columns only
-    keep = [c for c in ["name", "name:en", "geometry"] if c in gdf.columns]
-    gdf = gdf[keep].reset_index(drop=True)
-    save_geojson(gdf, "ap_districts.geojson", "Districts")
-
-
-def fetch_power_lines():
-    print("\n[3/5] Fetching OSM power lines...")
+def fetch_power_lines(bbox: list, aoi_geom):
+    print("\n[1/3] Fetching power lines...")
     tags = {"power": ["line", "minor_line"]}
-    gdf = ox.features_from_place(PLACE, tags=tags)
-    gdf = gdf[gdf.geometry.geom_type.isin(["LineString", "MultiLineString"])].copy()
-    keep = [c for c in ["name", "voltage", "cables", "operator", "geometry"] if c in gdf.columns]
-    gdf = gdf[keep].reset_index(drop=True)
-    # Convert voltage to numeric for styling
-    if "voltage" in gdf.columns:
-        gdf["voltage"] = (
-            gdf["voltage"]
-            .astype(str)
-            .str.extract(r"(\d+)", expand=False)
-            .astype(float, errors="ignore")
-        )
-    save_geojson(gdf, "power_lines.geojson", "Power lines")
+    try:
+        gdf = ox.features_from_bbox(*bbox_to_osmnx(bbox), tags=tags)
+        gdf = gdf[gdf.geometry.geom_type.isin(["LineString", "MultiLineString"])].copy()
+        # Clip to AOI polygon
+        gdf = gdf[gdf.geometry.intersects(aoi_geom)].copy()
+        keep = [c for c in ["name", "voltage", "cables", "operator", "geometry"] if c in gdf.columns]
+        gdf = gdf[keep].reset_index(drop=True)
+        if "voltage" in gdf.columns:
+            gdf["voltage"] = (
+                gdf["voltage"].astype(str)
+                .str.extract(r"(\d+)", expand=False)
+                .astype(float, errors="ignore")
+            )
+        save_geojson(gdf, "power_lines.geojson", "Power lines")
+    except Exception as e:
+        print(f"  ⚠️  Power lines fetch failed: {e}")
 
 
-def fetch_substations():
-    print("\n[4/5] Fetching OSM substations...")
+def fetch_substations(bbox: list, aoi_geom):
+    print("\n[2/3] Fetching substations...")
     tags = {"power": "substation"}
-    gdf = ox.features_from_place(PLACE, tags=tags)
-    # Substations can be polygons or points; convert polygons to centroids for display
-    gdf = gdf.copy()
-    gdf["geometry"] = gdf["geometry"].apply(
-        lambda g: g.centroid if g.geom_type in ["Polygon", "MultiPolygon"] else g
-    )
-    keep = [c for c in ["name", "voltage", "substation", "operator", "geometry"] if c in gdf.columns]
-    gdf = gdf[keep].reset_index(drop=True)
-    save_geojson(gdf, "substations.geojson", "Substations")
+    try:
+        gdf = ox.features_from_bbox(*bbox_to_osmnx(bbox), tags=tags)
+        gdf = gdf.copy()
+        # Convert polygons → centroids for point display
+        gdf["geometry"] = gdf["geometry"].apply(
+            lambda g: g.centroid if g.geom_type in ["Polygon", "MultiPolygon"] else g
+        )
+        gdf = gdf[gdf.geometry.within(aoi_geom)].copy()
+        keep = [c for c in ["name", "voltage", "substation", "operator", "geometry"] if c in gdf.columns]
+        gdf = gdf[keep].reset_index(drop=True)
+        save_geojson(gdf, "substations.geojson", "Substations")
+    except Exception as e:
+        print(f"  ⚠️  Substations fetch failed: {e}")
 
 
-def fetch_roads():
-    print("\n[5/5] Fetching OSM major roads...")
+def fetch_roads(bbox: list, aoi_geom):
+    print("\n[3/3] Fetching major roads...")
     tags = {"highway": ["motorway", "trunk", "primary", "secondary"]}
-    gdf = ox.features_from_place(PLACE, tags=tags)
-    gdf = gdf[gdf.geometry.geom_type.isin(["LineString", "MultiLineString"])].copy()
-    keep = [c for c in ["name", "highway", "ref", "maxspeed", "geometry"] if c in gdf.columns]
-    gdf = gdf[keep].reset_index(drop=True)
-    save_geojson(gdf, "roads.geojson", "Roads")
+    try:
+        gdf = ox.features_from_bbox(*bbox_to_osmnx(bbox), tags=tags)
+        gdf = gdf[gdf.geometry.geom_type.isin(["LineString", "MultiLineString"])].copy()
+        gdf = gdf[gdf.geometry.intersects(aoi_geom)].copy()
+        keep = [c for c in ["name", "highway", "ref", "maxspeed", "geometry"] if c in gdf.columns]
+        gdf = gdf[keep].reset_index(drop=True)
+        save_geojson(gdf, "roads.geojson", "Roads")
+    except Exception as e:
+        print(f"  ⚠️  Roads fetch failed: {e}")
 
 
 if __name__ == "__main__":
-    print("═" * 50)
-    print("  AP OSM Data Fetcher")
-    print("  Place:", PLACE)
-    print("  Output:", OUTPUT)
-    print("═" * 50)
+    print("=" * 50)
+    print("  OSM Data Fetcher — AOI Clipped")
+    print("=" * 50)
 
-    fetch_state_boundary()
-    fetch_districts()
-    fetch_power_lines()
-    fetch_substations()
-    fetch_roads()
+    cfg = load_config()
+    bbox = cfg["bbox"]   # [W, S, E, N]
+    aoi_geom = load_aoi_geometry()
 
-    print("\n🎉 All OSM data fetched successfully!")
-    print(f"   Files saved to: {OUTPUT}")
+    print(f"\n  Fetching OSM data within: {cfg['name']} boundary")
+
+    fetch_power_lines(bbox, aoi_geom)
+    fetch_substations(bbox, aoi_geom)
+    fetch_roads(bbox, aoi_geom)
+
+    print("\n🎉 OSM data ready!")
+    print("   Next: python backend/scripts/fetch_esa_lulc.py")
