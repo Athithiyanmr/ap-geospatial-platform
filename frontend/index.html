@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AP Geospatial Platform — ESA LULC + Power + Roads</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0b1222; --bg2: #131d2e; --bg3: #0a0f1a;
+  --surface: #172033; --surface2: #1c2a40;
+  --accent: #38bdf8; --accent2: #0ea5e9;
+  --green: #22c55e; --yellow: #eab308; --red: #ef4444;
+  --orange: #f97316; --purple: #a855f7;
+  --text: #f1f5f9; --text2: #e2e8f0; --muted: #64748b; --muted2: #94a3b8;
+  --border: #1e2d44; --border2: #293a52;
+  --radius: 8px; --transition: 0.2s ease;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+
+/* Navbar */
+.navbar {
+  background:var(--bg3); border-bottom:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 20px; height:50px; flex-shrink:0; z-index:1000;
+}
+.nav-brand { display:flex; align-items:center; gap:10px; }
+.nav-logo { width:32px; height:32px; background:linear-gradient(135deg,var(--accent),#0284c7); border-radius:8px; display:flex; align-items:center; justify-content:center; }
+.nav-title { font-size:14px; font-weight:700; letter-spacing:-0.02em; }
+.nav-subtitle { font-size:10px; color:var(--muted); font-weight:500; }
+.badge-live { display:flex; align-items:center; gap:5px; background:rgba(34,197,94,0.12); color:var(--green); padding:3px 10px; border-radius:20px; font-size:10px; font-weight:700; }
+.badge-live::before { content:''; width:6px; height:6px; background:var(--green); border-radius:50%; animation:pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+/* Layout */
+.main { display:flex; flex:1; overflow:hidden; }
+
+/* Sidebar */
+.sidebar {
+  width:300px; flex-shrink:0; background:var(--bg2);
+  border-right:1px solid var(--border);
+  display:flex; flex-direction:column; overflow:hidden;
+}
+.sidebar-header { padding:14px 16px; border-bottom:1px solid var(--border); }
+.sidebar-header h3 { font-size:13px; color:var(--accent); font-weight:700; margin-bottom:2px; }
+.sidebar-header p { font-size:11px; color:var(--muted); }
+.sidebar-body { flex:1; overflow-y:auto; padding:14px 16px; }
+.sidebar-body::-webkit-scrollbar { width:3px; }
+.sidebar-body::-webkit-scrollbar-thumb { background:var(--border2); border-radius:2px; }
+
+/* Section title */
+.section-title {
+  font-size:10px; font-weight:700; color:var(--muted);
+  text-transform:uppercase; letter-spacing:0.08em;
+  margin:14px 0 8px;
+}
+.section-title:first-child { margin-top:0; }
+
+/* Layer toggle */
+.layer-toggle {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:8px 10px; background:var(--surface); border:1px solid var(--border);
+  border-radius:6px; margin-bottom:5px; cursor:pointer;
+  font-size:12px; color:var(--text2); transition:var(--transition);
+  user-select:none;
+}
+.layer-toggle:hover { border-color:var(--border2); background:var(--surface2); }
+.layer-toggle-left { display:flex; align-items:center; gap:8px; }
+.layer-dot { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
+.toggle-switch { width:28px; height:15px; background:var(--border2); border-radius:8px; position:relative; transition:var(--transition); flex-shrink:0; }
+.toggle-switch.on { background:var(--accent); }
+.toggle-knob { position:absolute; top:2px; left:2px; width:11px; height:11px; background:#fff; border-radius:50%; transition:var(--transition); }
+.toggle-switch.on .toggle-knob { left:15px; }
+
+/* Stats cards */
+.stats-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px; }
+.stat-card { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:10px; text-align:center; }
+.stat-card .num { font-size:18px; font-weight:800; color:var(--accent); letter-spacing:-0.03em; }
+.stat-card .lbl { font-size:10px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:0.06em; margin-top:2px; }
+
+/* Legend */
+.legend-list { display:flex; flex-direction:column; gap:5px; }
+.legend-item { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text2); }
+.legend-swatch { width:12px; height:12px; border-radius:3px; flex-shrink:0; }
+.legend-line { width:20px; height:3px; border-radius:2px; flex-shrink:0; }
+.legend-circle { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+
+/* Info box */
+.info-box {
+  background:rgba(56,189,248,0.06); border:1px solid rgba(56,189,248,0.15);
+  border-radius:6px; padding:10px 12px; font-size:11px;
+  color:var(--muted2); line-height:1.6; margin-top:10px;
+}
+.info-box strong { color:var(--accent); }
+
+/* Loading overlay */
+#loadingOverlay {
+  position:fixed; inset:0; background:rgba(11,18,34,0.85);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  z-index:9999; gap:12px;
+}
+#loadingOverlay.hidden { display:none; }
+.loader { width:40px; height:40px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.load-msg { font-size:13px; color:var(--muted2); font-weight:500; }
+.load-step { font-size:11px; color:var(--muted); }
+
+/* Status bar */
+.statusbar {
+  position:absolute; bottom:0; left:0; right:0;
+  height:24px; background:rgba(11,18,34,0.8);
+  display:flex; align-items:center; padding:0 12px;
+  font-size:10px; color:var(--muted); gap:16px;
+  z-index:500; pointer-events:none;
+}
+.status-item { display:flex; align-items:center; gap:4px; }
+
+/* Error toast */
+.toast { position:fixed; bottom:32px; right:20px; padding:10px 18px; border-radius:8px; font-size:12px; font-weight:600; color:#fff; z-index:3000; transform:translateY(60px); opacity:0; transition:all 0.3s ease; pointer-events:none; }
+.toast.show { transform:translateY(0); opacity:1; }
+.toast-success { background:var(--green); }
+.toast-error { background:var(--red); }
+.toast-info { background:var(--accent); color:#0b1222; }
+
+/* Map wrap */
+#mapWrap { flex:1; position:relative; }
+#map { width:100%; height:100%; }
+</style>
+</head>
+<body>
+
+<!-- Loading Overlay -->
+<div id="loadingOverlay">
+  <div class="loader"></div>
+  <div class="load-msg">Loading AP Geospatial Platform</div>
+  <div class="load-step" id="loadStep">Initialising map...</div>
+</div>
+
+<!-- Navbar -->
+<nav class="navbar">
+  <div class="nav-brand">
+    <div class="nav-logo">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5">
+        <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+        <polyline points="2 17 12 22 22 17"/>
+        <polyline points="2 12 12 17 22 12"/>
+      </svg>
+    </div>
+    <div>
+      <div class="nav-title">AP Geospatial Platform</div>
+      <div class="nav-subtitle">Andhra Pradesh — ESA LULC + OSM Power + Roads</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <span class="badge-live">LIVE DATA</span>
+    <span style="font-size:11px;color:var(--muted);">ESA WorldCover 2021 &middot; OSM</span>
+  </div>
+</nav>
+
+<!-- Main -->
+<div class="main">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h3>Layer Control</h3>
+      <p>Toggle layers and explore AP data</p>
+    </div>
+    <div class="sidebar-body">
+
+      <!-- Stats -->
+      <div class="section-title">Dataset Stats</div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="num" id="statDistricts">26</div><div class="lbl">Districts</div></div>
+        <div class="stat-card"><div class="num" id="statPower">--</div><div class="lbl">Power Lines</div></div>
+        <div class="stat-card"><div class="num" id="statSubs">--</div><div class="lbl">Substations</div></div>
+        <div class="stat-card"><div class="num" id="statRoads">--</div><div class="lbl">Road Segs</div></div>
+      </div>
+
+      <!-- Boundary Layers -->
+      <div class="section-title">Administrative</div>
+      <div class="layer-toggle" onclick="toggleLayer('boundary', this)">
+        <div class="layer-toggle-left">
+          <div class="layer-dot" style="background:#38bdf8;border:1px dashed #38bdf8"></div>
+          <span>AP State Boundary</span>
+        </div>
+        <div class="toggle-switch on" id="sw-boundary"><div class="toggle-knob"></div></div>
+      </div>
+      <div class="layer-toggle" onclick="toggleLayer('districts', this)">
+        <div class="layer-toggle-left">
+          <div class="layer-dot" style="background:#64748b;border:1px solid #64748b"></div>
+          <span>Districts (26)</span>
+        </div>
+        <div class="toggle-switch on" id="sw-districts"><div class="toggle-knob"></div></div>
+      </div>
+
+      <!-- LULC -->
+      <div class="section-title">Land Cover (ESA WorldCover 2021)</div>
+      <div class="layer-toggle" onclick="toggleLayer('lulc', this)">
+        <div class="layer-toggle-left">
+          <div class="layer-dot" style="background:linear-gradient(135deg,#006400,#f096ff,#fa0000)"></div>
+          <span>LULC Classes</span>
+        </div>
+        <div class="toggle-switch on" id="sw-lulc"><div class="toggle-knob"></div></div>
+      </div>
+
+      <!-- Power -->
+      <div class="section-title">Power Infrastructure (OSM)</div>
+      <div class="layer-toggle" onclick="toggleLayer('powerlines', this)">
+        <div class="layer-toggle-left">
+          <div class="layer-line" style="width:16px;height:3px;background:#f97316;border-radius:2px"></div>
+          <span>Transmission Lines</span>
+        </div>
+        <div class="toggle-switch on" id="sw-powerlines"><div class="toggle-knob"></div></div>
+      </div>
+      <div class="layer-toggle" onclick="toggleLayer('substations', this)">
+        <div class="layer-toggle-left">
+          <div class="layer-circle" style="width:10px;height:10px;background:#fbbf24;border-radius:50%"></div>
+          <span>Substations</span>
+        </div>
+        <div class="toggle-switch on" id="sw-substations"><div class="toggle-knob"></div></div>
+      </div>
+
+      <!-- Roads -->
+      <div class="section-title">Roads (OSM)</div>
+      <div class="layer-toggle" onclick="toggleLayer('roads', this)">
+        <div class="layer-toggle-left">
+          <div class="layer-line" style="width:16px;height:3px;background:#d97706;border-radius:2px"></div>
+          <span>Major Roads</span>
+        </div>
+        <div class="toggle-switch on" id="sw-roads"><div class="toggle-knob"></div></div>
+      </div>
+
+      <!-- LULC Legend -->
+      <div class="section-title">ESA LULC Legend</div>
+      <div class="legend-list">
+        <div class="legend-item"><div class="legend-swatch" style="background:#006400"></div>Tree Cover</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#ffbb22"></div>Shrubland</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#ffff4c;border:1px solid #555"></div>Grassland</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#f096ff"></div>Cropland</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#fa0000"></div>Built-up</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#b4b4b4"></div>Bare / Sparse</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#0064c8"></div>Water Bodies</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#0096a0"></div>Wetland</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#00cf75"></div>Mangroves</div>
+      </div>
+
+      <!-- Infrastructure Legend -->
+      <div class="section-title">Infrastructure Legend</div>
+      <div class="legend-list">
+        <div class="legend-item"><div class="legend-line" style="background:#ef4444"></div>HV Line (&gt;200kV)</div>
+        <div class="legend-item"><div class="legend-line" style="background:#38bdf8"></div>MV Line (≤200kV)</div>
+        <div class="legend-item"><div class="legend-circle" style="background:#fbbf24"></div>Substation</div>
+        <div class="legend-item"><div class="legend-line" style="background:#f59e0b"></div>Motorway / Trunk</div>
+        <div class="legend-item"><div class="legend-line" style="background:#6b7280"></div>Primary / Secondary</div>
+      </div>
+
+      <div class="info-box">
+        <strong>Data Sources</strong><br>
+        Boundary &amp; infrastructure: &copy; OpenStreetMap (ODbL)<br>
+        Land cover: ESA WorldCover 2021 v200 &copy; ESA / Vito<br>
+        Served via FastAPI REST backend
+      </div>
+    </div>
+  </div>
+
+  <!-- Map -->
+  <div id="mapWrap">
+    <div id="map"></div>
+    <div class="statusbar">
+      <div class="status-item" id="coordDisplay">📍 15.91°N, 79.74°E</div>
+      <div class="status-item" id="zoomDisplay">🔍 Zoom 7</div>
+      <div class="status-item" id="dataStatus">⏳ Loading data...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+const API = window.location.origin + '/api';
+
+const ESA_COLORS = {
+  10:'#006400', 20:'#ffbb22', 30:'#ffff4c',
+  40:'#f096ff', 50:'#fa0000', 60:'#b4b4b4',
+  70:'#f0f0f0', 80:'#0064c8', 90:'#0096a0',
+  95:'#00cf75', 100:'#fae6a0'
+};
+const ESA_LABELS = {
+  10:'Tree cover', 20:'Shrubland', 30:'Grassland',
+  40:'Cropland',  50:'Built-up',  60:'Bare / sparse veg',
+  70:'Snow & ice', 80:'Water bodies', 90:'Herbaceous wetland',
+  95:'Mangroves', 100:'Moss & lichen'
+};
+const ROAD_COLORS = {
+  motorway:'#f59e0b', trunk:'#d97706',
+  primary:'#6b7280', secondary:'#4b5563'
+};
+const ROAD_WEIGHTS = {
+  motorway:3.5, trunk:2.5, primary:1.5, secondary:1
+};
+
+let map;
+const layers = {};
+const layerState = {
+  boundary:true, districts:true, lulc:true,
+  powerlines:true, substations:true, roads:true
+};
+
+function setLoadStep(msg) {
+  document.getElementById('loadStep').textContent = msg;
+}
+
+async function fetchLayer(endpoint, label) {
+  setLoadStep(`Fetching ${label}...`);
+  try {
+    const res = await fetch(`${API}/${endpoint}`);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    return await res.json();
+  } catch (e) {
+    console.warn(`[${label}] ${e.message}`);
+    showToast(`${label}: ${e.message}`, 'error');
+    return null;
+  }
+}
+
+function addBoundary(data) {
+  if (!data) return;
+  layers.boundary = L.geoJSON(data, {
+    style: {
+      color: '#38bdf8', weight: 2.5, opacity: 0.8,
+      fillColor: '#38bdf8', fillOpacity: 0.03,
+      dashArray: '8,4'
+    }
+  }).bindPopup('<b style="color:#38bdf8">Andhra Pradesh</b><br>State Boundary').addTo(map);
+}
+
+function addDistricts(data) {
+  if (!data) return;
+  const count = data.features ? data.features.length : 0;
+  document.getElementById('statDistricts').textContent = count;
+  layers.districts = L.geoJSON(data, {
+    style: {
+      color: '#475569', weight: 1, opacity: 0.7,
+      fillColor: '#38bdf8', fillOpacity: 0.02
+    },
+    onEachFeature: (f, l) => {
+      const name = f.properties.name || f.properties['name:en'] || 'District';
+      l.bindTooltip(name, { sticky: true, className: 'leaflet-tooltip-dark' });
+      l.bindPopup(`<b>${name}</b><br>Andhra Pradesh District`);
+    }
+  }).addTo(map);
+}
+
+function addLULC(data) {
+  if (!data) return;
+  layers.lulc = L.geoJSON(data, {
+    style: f => ({
+      fillColor: f.properties.color || ESA_COLORS[f.properties.class_value] || '#888',
+      color: 'transparent',
+      fillOpacity: 0.68,
+      weight: 0
+    }),
+    onEachFeature: (f, l) => {
+      const cls = f.properties.class_value;
+      const label = f.properties.class_label || ESA_LABELS[cls] || 'Land Cover';
+      const color = f.properties.color || ESA_COLORS[cls] || '#888';
+      l.bindPopup(
+        `<div style="display:flex;align-items:center;gap:8px">
+          <div style="width:14px;height:14px;background:${color};border-radius:3px"></div>
+          <b>${label}</b>
+        </div>
+        <div style="margin-top:6px;font-size:11px;color:#94a3b8">ESA WorldCover 2021 &middot; Class ${cls}</div>`
+      );
+    }
+  }).addTo(map);
+}
+
+function addPowerLines(data) {
+  if (!data) return;
+  const count = data.features ? data.features.length : 0;
+  document.getElementById('statPower').textContent = count.toLocaleString();
+  layers.powerlines = L.geoJSON(data, {
+    style: f => {
+      const v = parseFloat(f.properties.voltage) || 0;
+      return {
+        color: v > 200000 ? '#ef4444' : v > 100000 ? '#f97316' : '#38bdf8',
+        weight: v > 200000 ? 2.5 : v > 100000 ? 2 : 1.5,
+        opacity: 0.85,
+        dashArray: v > 200000 ? null : '6,3'
+      };
+    },
+    onEachFeature: (f, l) => {
+      const v = f.properties.voltage
+        ? (parseFloat(f.properties.voltage) / 1000).toFixed(0) + ' kV'
+        : 'Unknown';
+      l.bindPopup(
+        `<b>⚡ Power Line</b><br>
+         Voltage: <b>${v}</b><br>
+         Name: ${f.properties.name || '—'}<br>
+         Cables: ${f.properties.cables || '—'}`
+      );
+    }
+  }).addTo(map);
+}
+
+function addSubstations(data) {
+  if (!data) return;
+  const count = data.features ? data.features.length : 0;
+  document.getElementById('statSubs').textContent = count.toLocaleString();
+  layers.substations = L.geoJSON(data, {
+    pointToLayer: (f, latlng) => {
+      const v = parseFloat(f.properties.voltage) || 0;
+      const r = v > 200000 ? 8 : v > 100000 ? 6 : 5;
+      return L.circleMarker(latlng, {
+        radius: r,
+        color: '#fbbf24', fillColor: '#fbbf24',
+        fillOpacity: 0.85, weight: 2
+      });
+    },
+    onEachFeature: (f, l) => {
+      const v = f.properties.voltage
+        ? (parseFloat(f.properties.voltage) / 1000).toFixed(0) + ' kV'
+        : 'Unknown';
+      l.bindPopup(
+        `<b>🏭 Substation</b><br>
+         Name: <b>${f.properties.name || 'Unnamed'}</b><br>
+         Voltage: ${v}<br>
+         Type: ${f.properties.substation || '—'}<br>
+         Operator: ${f.properties.operator || '—'}`
+      );
+    }
+  }).addTo(map);
+}
+
+function addRoads(data) {
+  if (!data) return;
+  const count = data.features ? data.features.length : 0;
+  document.getElementById('statRoads').textContent = count.toLocaleString();
+  layers.roads = L.geoJSON(data, {
+    style: f => ({
+      color: ROAD_COLORS[f.properties.highway] || '#6b7280',
+      weight: ROAD_WEIGHTS[f.properties.highway] || 1,
+      opacity: 0.75
+    }),
+    onEachFeature: (f, l) => {
+      const hw = f.properties.highway || 'road';
+      l.bindPopup(
+        `<b>🛣️ ${hw.charAt(0).toUpperCase() + hw.slice(1)}</b><br>
+         Name: ${f.properties.name || '—'}<br>
+         Ref: ${f.properties.ref || '—'}<br>
+         Max Speed: ${f.properties.maxspeed || '—'}`
+      );
+    }
+  }).addTo(map);
+}
+
+function toggleLayer(name, el) {
+  layerState[name] = !layerState[name];
+  const sw = document.getElementById('sw-' + name);
+  if (sw) sw.classList.toggle('on', layerState[name]);
+  if (!layers[name]) return;
+  if (layerState[name]) layers[name].addTo(map);
+  else map.removeLayer(layers[name]);
+}
+
+function showToast(msg, type='info') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast toast-${type} show`;
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+function updateStatus(msg) {
+  document.getElementById('dataStatus').textContent = msg;
+}
+
+async function loadAllLayers() {
+  // Load in stacking order: LULC (bottom) → roads → power → boundary (top)
+  const [boundary, districts, lulc, powerLines, substations, roads] = await Promise.all([
+    fetchLayer('boundary', 'AP Boundary'),
+    fetchLayer('districts', 'Districts'),
+    fetchLayer('lulc', 'ESA LULC'),
+    fetchLayer('power-lines', 'Power Lines'),
+    fetchLayer('substations', 'Substations'),
+    fetchLayer('roads', 'Roads'),
+  ]);
+
+  setLoadStep('Rendering layers...');
+
+  // Render in correct z-order
+  addLULC(lulc);
+  addRoads(roads);
+  addPowerLines(powerLines);
+  addSubstations(substations);
+  addDistricts(districts);
+  addBoundary(boundary);
+
+  document.getElementById('loadingOverlay').classList.add('hidden');
+
+  const loaded = [lulc, powerLines, substations, roads, districts, boundary].filter(Boolean).length;
+  updateStatus(`✅ ${loaded}/6 layers loaded`);
+  showToast(`Platform ready — ${loaded} layers loaded`, 'success');
+
+  // Fetch stats
+  try {
+    const stats = await fetch(`${API}/stats`).then(r => r.json());
+    if (stats.power_lines) document.getElementById('statPower').textContent = stats.power_lines.features.toLocaleString();
+    if (stats.substations) document.getElementById('statSubs').textContent = stats.substations.features.toLocaleString();
+    if (stats.roads) document.getElementById('statRoads').textContent = stats.roads.features.toLocaleString();
+  } catch (e) {}
+}
+
+window.onload = function() {
+  // AP center
+  map = L.map('map', { center:[15.9129, 79.7400], zoom:7, zoomControl:false });
+  L.control.zoom({ position:'topright' }).addTo(map);
+
+  // Dark basemap
+  L.tileLayer(
+    'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    { attribution:'&copy; OpenStreetMap &copy; CARTO', maxZoom:19 }
+  ).addTo(map);
+
+  // Coordinate & zoom display
+  map.on('mousemove', e => {
+    document.getElementById('coordDisplay').textContent =
+      `📍 ${e.latlng.lat.toFixed(4)}°N, ${e.latlng.lng.toFixed(4)}°E`;
+  });
+  map.on('zoomend', () => {
+    document.getElementById('zoomDisplay').textContent = `🔍 Zoom ${map.getZoom()}`;
+  });
+
+  loadAllLayers();
+};
+</script>
+
+<!-- Leaflet tooltip dark theme -->
+<style>
+.leaflet-tooltip-dark {
+  background:rgba(11,18,34,0.9) !important;
+  border:1px solid #1e2d44 !important;
+  color:#f1f5f9 !important;
+  font-size:11px !important;
+  font-family:'Inter',sans-serif !important;
+  box-shadow:0 2px 8px rgba(0,0,0,0.4) !important;
+}
+.leaflet-popup-content-wrapper {
+  background:#172033 !important;
+  border:1px solid #1e2d44 !important;
+  color:#e2e8f0 !important;
+  font-family:'Inter',sans-serif !important;
+  font-size:12px !important;
+  box-shadow:0 4px 20px rgba(0,0,0,0.5) !important;
+  border-radius:8px !important;
+}
+.leaflet-popup-tip { background:#172033 !important; }
+.leaflet-popup-close-button { color:#64748b !important; }
+</style>
+</body>
+</html>
