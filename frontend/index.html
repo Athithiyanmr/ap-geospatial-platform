@@ -27,9 +27,6 @@ body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); 
 .nav-logo { width:32px; height:32px; background:linear-gradient(135deg,var(--solar),var(--wind)); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:16px; }
 .nav-title { font-size:14px; font-weight:700; letter-spacing:-0.02em; }
 .nav-subtitle { font-size:10px; color:var(--muted); font-weight:500; }
-.badge-live { display:flex; align-items:center; gap:5px; background:rgba(34,197,94,0.12); color:var(--green); padding:3px 10px; border-radius:20px; font-size:10px; font-weight:700; }
-.badge-live::before { content:''; width:6px; height:6px; background:var(--green); border-radius:50%; animation:pulse 2s infinite; }
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
 
 .main { display:flex; flex:1; overflow:hidden; }
 
@@ -43,9 +40,8 @@ body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); 
 
 .section-title { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; margin:16px 0 8px; padding-bottom:5px; border-bottom:1px solid var(--border); }
 .section-title:first-child { margin-top:0; }
-
-/* RE section highlight */
 .section-title.re { color:var(--solar); border-color:rgba(251,191,36,0.2); }
+.section-title.assess { color:#34d399; border-color:rgba(52,211,153,0.2); }
 
 .layer-toggle { display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:var(--surface); border:1px solid var(--border); border-radius:6px; margin-bottom:5px; cursor:pointer; font-size:12px; color:var(--text2); transition:var(--transition); user-select:none; }
 .layer-toggle:hover { border-color:var(--border2); background:var(--surface2); }
@@ -75,10 +71,63 @@ body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); 
 .info-box { background:rgba(56,189,248,0.06); border:1px solid rgba(56,189,248,0.15); border-radius:6px; padding:10px 12px; font-size:11px; color:var(--muted2); line-height:1.6; margin-top:10px; }
 .info-box strong { color:var(--accent); }
 
+/* ── Solar Suitability Assessment Tool ── */
+.assess-btn {
+  width:100%; padding:9px 12px; border-radius:6px; border:none; cursor:pointer;
+  font-family:'Inter',sans-serif; font-size:12px; font-weight:700;
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  transition:var(--transition);
+}
+.assess-btn.inactive {
+  background:rgba(52,211,153,0.12); color:#34d399;
+  border:1px solid rgba(52,211,153,0.25);
+}
+.assess-btn.inactive:hover { background:rgba(52,211,153,0.2); border-color:rgba(52,211,153,0.5); }
+.assess-btn.active {
+  background:#34d399; color:#0b1222;
+  border:1px solid #34d399;
+  animation:glow 1.5s ease-in-out infinite;
+}
+@keyframes glow{ 0%,100%{box-shadow:0 0 6px rgba(52,211,153,0.4)} 50%{box-shadow:0 0 14px rgba(52,211,153,0.8)} }
+
+.assess-hint { font-size:10px; color:var(--muted); text-align:center; margin-top:5px; line-height:1.5; }
+
+/* Result card */
+.assess-result {
+  background:var(--surface); border:1px solid rgba(52,211,153,0.25);
+  border-radius:8px; padding:12px; margin-top:10px;
+  display:none;
+}
+.assess-result.show { display:block; }
+.assess-result-title {
+  font-size:11px; font-weight:700; color:#34d399;
+  display:flex; align-items:center; gap:6px; margin-bottom:10px;
+}
+.assess-row {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:6px 0; border-bottom:1px solid var(--border); font-size:11px;
+}
+.assess-row:last-child { border-bottom:none; padding-bottom:0; }
+.assess-row-label { color:var(--muted2); display:flex; align-items:center; gap:5px; }
+.assess-row-value { font-weight:700; color:var(--text); }
+.assess-row-value.good { color:var(--green); }
+.assess-row-value.warn { color:var(--solar); }
+.assess-row-value.bad  { color:var(--red); }
+
+.score-bar-wrap { margin-top:10px; }
+.score-bar-label { font-size:10px; color:var(--muted2); margin-bottom:4px; display:flex; justify-content:space-between; }
+.score-bar-bg { height:6px; background:var(--border); border-radius:3px; overflow:hidden; }
+.score-bar-fill { height:100%; border-radius:3px; transition:width 0.8s ease; }
+
+.assess-coords { font-size:10px; color:var(--muted); margin-top:8px; text-align:center; }
+
+/* loading spinner inline */
+.spin-sm { width:12px; height:12px; border:2px solid rgba(52,211,153,0.3); border-top-color:#34d399; border-radius:50%; animation:spin 0.7s linear infinite; display:inline-block; }
+@keyframes spin{to{transform:rotate(360deg)}}
+
 #loadingOverlay { position:fixed; inset:0; background:rgba(11,18,34,0.88); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:9999; gap:12px; }
 #loadingOverlay.hidden { display:none; }
 .loader { width:40px; height:40px; border:3px solid var(--border); border-top-color:var(--solar); border-radius:50%; animation:spin 0.8s linear infinite; }
-@keyframes spin{to{transform:rotate(360deg)}}
 .load-msg { font-size:13px; color:var(--text2); font-weight:600; }
 .load-step { font-size:11px; color:var(--muted); }
 
@@ -89,6 +138,9 @@ body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); 
 .toast-success { background:var(--green); }
 .toast-error { background:var(--red); }
 .toast-info { background:var(--accent); color:#0b1222; }
+
+/* assess mode cursor */
+body.assess-mode #map { cursor:crosshair !important; }
 
 #mapWrap { flex:1; position:relative; }
 #map { width:100%; height:100%; }
@@ -111,7 +163,6 @@ body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); 
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:12px;">
-    <span class="badge-live">LIVE DATA</span>
     <span style="font-size:11px;color:var(--muted);">Kadapa District, AP</span>
   </div>
 </nav>
@@ -136,6 +187,60 @@ body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); 
         <div class="stat-card re"><div class="num" id="statSolar">☀️ --</div><div class="lbl">Solar Parks</div></div>
         <div class="stat-card re"><div class="num" id="statWind">💨 --</div><div class="lbl">Wind Sites</div></div>
       </div>
+
+      <!-- ═══ SOLAR SUITABILITY ASSESSMENT ═══ -->
+      <div class="section-title assess">⚡ Solar Suitability Assessment</div>
+
+      <button class="assess-btn inactive" id="assessBtn" onclick="toggleAssessMode()">
+        <span id="assessBtnIcon">🎯</span>
+        <span id="assessBtnText">Click to Assess a Parcel</span>
+      </button>
+      <div class="assess-hint" id="assessHint">
+        Activate → click any land parcel on the map<br>
+        to calculate solar development suitability
+      </div>
+
+      <!-- Result panel -->
+      <div class="assess-result" id="assessResult">
+        <div class="assess-result-title">
+          <span>☀️</span>
+          <span id="assessResultTitle">Parcel Assessment</span>
+        </div>
+
+        <div class="assess-row">
+          <div class="assess-row-label">📍 Land Cover</div>
+          <div class="assess-row-value" id="resLULC">—</div>
+        </div>
+        <div class="assess-row">
+          <div class="assess-row-label">🏭 Nearest Substation</div>
+          <div class="assess-row-value" id="resSub">—</div>
+        </div>
+        <div class="assess-row">
+          <div class="assess-row-label">🛣️ Nearest Highway</div>
+          <div class="assess-row-value" id="resRoad">—</div>
+        </div>
+        <div class="assess-row">
+          <div class="assess-row-label">⚡ Power Line</div>
+          <div class="assess-row-value" id="resPower">—</div>
+        </div>
+        <div class="assess-row">
+          <div class="assess-row-label">☀️ Already RE Site</div>
+          <div class="assess-row-value" id="resRE">—</div>
+        </div>
+
+        <div class="score-bar-wrap">
+          <div class="score-bar-label">
+            <span>Suitability Score</span>
+            <span id="scoreLabel">—</span>
+          </div>
+          <div class="score-bar-bg">
+            <div class="score-bar-fill" id="scoreBar" style="width:0%;background:#34d399"></div>
+          </div>
+        </div>
+
+        <div class="assess-coords" id="assessCoords"></div>
+      </div>
+      <!-- ═══════════════════════════════════ -->
 
       <!-- Administrative -->
       <div class="section-title">Administrative</div>
@@ -184,7 +289,7 @@ body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); 
         <div class="toggle-switch on" id="sw-roads"><div class="toggle-knob"></div></div>
       </div>
 
-      <!-- Renewable Energy Sites — highlighted section -->
+      <!-- Renewable Energy Sites -->
       <div class="section-title re">☀️ Existing Renewable Energy Sites</div>
       <div class="layer-toggle re-layer" onclick="toggleLayer('solarparks',this)">
         <div class="layer-toggle-left">
@@ -242,7 +347,7 @@ body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); 
 
       <div class="info-box">
         <strong>Data Sources</strong><br>
-        Boundary &amp; RE sites: Local shapefiles<br>
+        Boundary &amp; RE sites: Local shapefiles / GPKG<br>
         Infrastructure: &copy; OpenStreetMap (ODbL)<br>
         Land cover: ESA WorldCover 2021 &copy; ESA/Vito
       </div>
@@ -268,6 +373,13 @@ const ESA_COLORS = {
   10:'#006400',20:'#ffbb22',30:'#ffff4c',40:'#f096ff',
   50:'#fa0000',60:'#b4b4b4',80:'#0064c8',90:'#0096a0',95:'#00cf75'
 };
+const ESA_LABELS = {
+  10:'Tree Cover',20:'Shrubland',30:'Grassland',40:'Cropland',
+  50:'Built-up',60:'Bare/Sparse',80:'Water Bodies',90:'Wetland',95:'Mangroves'
+};
+// LULC suitability: 0=bad 1=ok 2=good
+const LULC_SUIT = { 10:0, 20:1, 30:2, 40:0, 50:0, 60:2, 80:0, 90:0, 95:0 };
+
 const ROAD_COLORS = { motorway:'#f59e0b',trunk:'#d97706',primary:'#6b7280',secondary:'#4b5563' };
 const ROAD_WEIGHTS = { motorway:3.5,trunk:2.5,primary:1.5,secondary:1 };
 
@@ -277,6 +389,14 @@ const layerState = {
   boundary:true,lulc:true,powerlines:true,substations:true,
   roads:true,solarparks:true,windturbines:true,recombined:true
 };
+
+// Raw GeoJSON data stored for suitability calc
+let rawData = {};
+
+// Assessment state
+let assessMode = false;
+let assessMarker = null;
+let assessLines = [];
 
 function setStep(msg){ document.getElementById('loadStep').textContent = msg; }
 function updateStatus(msg){ document.getElementById('dataStatus').textContent = msg; }
@@ -295,6 +415,243 @@ async function fetchLayer(endpoint,label){
   }catch(e){
     console.warn(`[${label}] ${e.message}`);
     return null;
+  }
+}
+
+// ── Haversine distance in km ──
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371, dLat=(lat2-lat1)*Math.PI/180, dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+// ── Point to line segment distance (lat/lon, returns km) ──
+function ptToSegDist(px,py,ax,ay,bx,by){
+  const dx=bx-ax,dy=by-ay;
+  if(dx===0&&dy===0) return haversine(py,px,ay,ax);
+  const t=Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/(dx*dx+dy*dy)));
+  return haversine(py,px,ay+t*dy,ax+t*dx);
+}
+
+// ── Nearest substation ──
+function nearestSubstation(lat,lon){
+  const data=rawData.substations;
+  if(!data||!data.features||!data.features.length) return null;
+  let best=Infinity, bestF=null;
+  for(const f of data.features){
+    const g=f.geometry;
+    if(!g) continue;
+    let coords=[];
+    if(g.type==='Point') coords=[g.coordinates];
+    else if(g.type==='MultiPoint') coords=g.coordinates;
+    for(const [lo,la] of coords){
+      const d=haversine(lat,lon,la,lo);
+      if(d<best){best=d;bestF=f;}
+    }
+  }
+  return best<Infinity?{dist:best,feature:bestF}:null;
+}
+
+// ── Nearest road segment ──
+function nearestRoad(lat,lon){
+  const data=rawData.roads;
+  if(!data||!data.features||!data.features.length) return null;
+  let best=Infinity, bestF=null;
+  for(const f of data.features){
+    const g=f.geometry;
+    if(!g) continue;
+    let lines=[];
+    if(g.type==='LineString') lines=[g.coordinates];
+    else if(g.type==='MultiLineString') lines=g.coordinates;
+    for(const line of lines){
+      for(let i=0;i<line.length-1;i++){
+        const [ax,ay]=line[i],[bx,by]=line[i+1];
+        const d=ptToSegDist(lon,lat,ax,ay,bx,by);
+        if(d<best){best=d;bestF=f;}
+      }
+    }
+  }
+  return best<Infinity?{dist:best,feature:bestF}:null;
+}
+
+// ── Nearest power line ──
+function nearestPowerLine(lat,lon){
+  const data=rawData.powerlines;
+  if(!data||!data.features||!data.features.length) return null;
+  let best=Infinity, bestF=null;
+  for(const f of data.features){
+    const g=f.geometry;
+    if(!g) continue;
+    let lines=[];
+    if(g.type==='LineString') lines=[g.coordinates];
+    else if(g.type==='MultiLineString') lines=g.coordinates;
+    for(const line of lines){
+      for(let i=0;i<line.length-1;i++){
+        const [ax,ay]=line[i],[bx,by]=line[i+1];
+        const d=ptToSegDist(lon,lat,ax,ay,bx,by);
+        if(d<best){best=d;bestF=f;}
+      }
+    }
+  }
+  return best<Infinity?{dist:best,feature:bestF}:null;
+}
+
+// ── LULC class at point ──
+function lulcAtPoint(lat,lon){
+  const data=rawData.lulc;
+  if(!data||!data.features) return null;
+  // find smallest polygon containing point (or nearest)
+  for(const f of data.features){
+    if(!f.geometry) continue;
+    // simple bbox check first
+    const bbox=getBBox(f.geometry);
+    if(lat>=bbox[1]&&lat<=bbox[3]&&lon>=bbox[0]&&lon<=bbox[2]){
+      return f.properties;
+    }
+  }
+  return null;
+}
+
+function getBBox(geom){
+  let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity;
+  const pts=geom.type==='Polygon'?geom.coordinates[0]:
+            geom.type==='MultiPolygon'?geom.coordinates.flat(2):[];
+  for(const [x,y] of pts){
+    if(x<minx)minx=x;if(x>maxx)maxx=x;
+    if(y<miny)miny=y;if(y>maxy)maxy=y;
+  }
+  return[minx,miny,maxx,maxy];
+}
+
+// ── Check if point is within any RE site ──
+function isInRE(lat,lon){
+  for(const key of ['solarparks','windturbines','recombined']){
+    const data=rawData[key];
+    if(!data||!data.features) continue;
+    for(const f of data.features){
+      if(!f.geometry) continue;
+      const bbox=getBBox(f.geometry);
+      if(lat>=bbox[1]&&lat<=bbox[3]&&lon>=bbox[0]&&lon<=bbox[2]) return true;
+    }
+  }
+  return false;
+}
+
+// ── Score colour helper ──
+function scoreColor(pct){
+  if(pct>=70) return '#22c55e';
+  if(pct>=40) return '#fbbf24';
+  return '#ef4444';
+}
+function distClass(km,good,warn){
+  if(km<=good) return 'good';
+  if(km<=warn) return 'warn';
+  return 'bad';
+}
+function fmtDist(km){
+  return km<1?`${Math.round(km*1000)} m`:`${km.toFixed(1)} km`;
+}
+
+// ── Run assessment ──
+function runAssessment(lat,lon){
+  // Clear old lines
+  assessLines.forEach(l=>map.removeLayer(l));
+  assessLines=[];
+
+  const sub  = nearestSubstation(lat,lon);
+  const road = nearestRoad(lat,lon);
+  const pwr  = nearestPowerLine(lat,lon);
+  const lulc = lulcAtPoint(lat,lon);
+  const inRE = isInRE(lat,lon);
+
+  // Draw distance lines
+  const lineStyle={color:'#34d399',weight:1.5,dashArray:'4,4',opacity:0.7};
+  if(sub){
+    const sc=sub.feature.geometry.coordinates;
+    const pt=Array.isArray(sc[0])?sc[0]:sc;
+    const l=L.polyline([[lat,lon],[pt[1],pt[0]]],{...lineStyle,color:'#fbbf24'}).addTo(map);
+    assessLines.push(l);
+  }
+  if(road&&road.feature.geometry.coordinates.length>0){
+    const rc=road.feature.geometry.coordinates;
+    const mid=rc[Math.floor(rc.length/2)];
+    const l=L.polyline([[lat,lon],[mid[1],mid[0]]],{...lineStyle,color:'#d97706'}).addTo(map);
+    assessLines.push(l);
+  }
+
+  // Populate result panel
+  const subDist  = sub  ? sub.dist  : null;
+  const roadDist = road ? road.dist : null;
+  const pwrDist  = pwr  ? pwr.dist  : null;
+
+  // Suitability score (0-100)
+  let score = 50;
+  if(subDist  !== null) score += subDist<=5?20:subDist<=15?10:subDist<=30?0:-10;
+  if(roadDist !== null) score += roadDist<=2?15:roadDist<=5?8:roadDist<=10?0:-5;
+  if(pwrDist  !== null) score += pwrDist<=3?15:pwrDist<=10?8:0;
+  if(lulc){
+    const s=LULC_SUIT[lulc.class_value]||0;
+    score += s===2?10:s===1?0:-20;
+  }
+  if(inRE) score -= 30;
+  score = Math.max(0,Math.min(100,score));
+
+  // Update UI
+  document.getElementById('resLULC').textContent  = lulc?(lulc.class_label||'Unknown'):'—';
+  document.getElementById('resLULC').className     = 'assess-row-value';
+
+  if(subDist!==null){
+    document.getElementById('resSub').textContent = fmtDist(subDist);
+    document.getElementById('resSub').className   = 'assess-row-value '+distClass(subDist,5,20);
+  } else { document.getElementById('resSub').textContent='No data'; }
+
+  if(roadDist!==null){
+    const rname=road.feature.properties.name||road.feature.properties.highway||'Road';
+    document.getElementById('resRoad').textContent = `${fmtDist(roadDist)} (${rname})`;
+    document.getElementById('resRoad').className   = 'assess-row-value '+distClass(roadDist,2,8);
+  } else { document.getElementById('resRoad').textContent='No data'; }
+
+  if(pwrDist!==null){
+    const v=pwr.feature.properties.voltage?(parseFloat(pwr.feature.properties.voltage)/1000).toFixed(0)+' kV':'';
+    document.getElementById('resPower').textContent = `${fmtDist(pwrDist)}${v?' · '+v:''}`;
+    document.getElementById('resPower').className   = 'assess-row-value '+distClass(pwrDist,3,10);
+  } else { document.getElementById('resPower').textContent='No data'; }
+
+  document.getElementById('resRE').textContent   = inRE?'Yes — already developed':'No — available';
+  document.getElementById('resRE').className      = 'assess-row-value '+(inRE?'bad':'good');
+
+  const pct=score;
+  document.getElementById('scoreLabel').textContent = `${pct}/100`;
+  document.getElementById('scoreBar').style.width   = pct+'%';
+  document.getElementById('scoreBar').style.background = scoreColor(pct);
+  document.getElementById('assessCoords').textContent = `📍 ${lat.toFixed(5)}°N, ${lon.toFixed(5)}°E`;
+  document.getElementById('assessResult').classList.add('show');
+
+  document.getElementById('assessResultTitle').textContent =
+    pct>=70?'✅ High Suitability':pct>=40?'⚠️ Moderate Suitability':'❌ Low Suitability';
+}
+
+// ── Toggle assess mode ──
+function toggleAssessMode(){
+  assessMode=!assessMode;
+  const btn=document.getElementById('assessBtn');
+  const hint=document.getElementById('assessHint');
+  if(assessMode){
+    btn.className='assess-btn active';
+    document.getElementById('assessBtnIcon').textContent='✕';
+    document.getElementById('assessBtnText').textContent='Cancel Assessment';
+    hint.textContent='Click anywhere on the map to assess that parcel';
+    document.body.classList.add('assess-mode');
+    showToast('Assessment mode ON — click a land parcel','info');
+  } else {
+    btn.className='assess-btn inactive';
+    document.getElementById('assessBtnIcon').textContent='🎯';
+    document.getElementById('assessBtnText').textContent='Click to Assess a Parcel';
+    hint.innerHTML='Activate → click any land parcel on the map<br>to calculate solar development suitability';
+    document.body.classList.remove('assess-mode');
+    assessLines.forEach(l=>map.removeLayer(l)); assessLines=[];
+    if(assessMarker){map.removeLayer(assessMarker);assessMarker=null;}
+    document.getElementById('assessResult').classList.remove('show');
   }
 }
 
@@ -361,31 +718,16 @@ function addRoads(data){
   }).addTo(map);
 }
 
-// ─── Renewable Energy Layers ───
-
 function addSolarParks(data){
   if(!data)return;
   const count=(data.features||[]).length;
   document.getElementById('statSolar').textContent=`☀️ ${count}`;
   layers.solarparks=L.geoJSON(data,{
-    style:{
-      color:'#f59e0b',weight:2,opacity:0.9,
-      fillColor:'#fbbf24',fillOpacity:0.35
-    },
+    style:{color:'#f59e0b',weight:2,opacity:0.9,fillColor:'#fbbf24',fillOpacity:0.35},
     onEachFeature:(f,l)=>{
       const name=f.properties.name||f.properties.Name||f.properties.NAME||'Solar Park';
       const area=f.properties.area_ha||f.properties.Area||'';
-      l.bindPopup(
-        `<div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:18px">☀️</span>
-          <b>${name}</b>
-        </div>
-        <div style="margin-top:6px;font-size:11px;color:#94a3b8">
-          Type: Solar Park<br>
-          ${area?`Area: ${area} ha<br>`:''}
-          Kadapa District, AP
-        </div>`
-      );
+      l.bindPopup(`<div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">☀️</span><b>${name}</b></div><div style="margin-top:6px;font-size:11px;color:#94a3b8">Type: Solar Park<br>${area?`Area: ${area} ha<br>`:''}Kadapa District, AP</div>`);
       l.on('mouseover',function(){this.setStyle({fillOpacity:0.6,weight:3});});
       l.on('mouseout',function(){this.setStyle({fillOpacity:0.35,weight:2});});
     }
@@ -396,30 +738,13 @@ function addWindTurbines(data){
   if(!data)return;
   const count=(data.features||[]).length;
   document.getElementById('statWind').textContent=`💨 ${count}`;
-  // Handle both points and polygons
   layers.windturbines=L.geoJSON(data,{
-    style:{
-      color:'#10b981',weight:2,opacity:0.9,
-      fillColor:'#34d399',fillOpacity:0.3
-    },
-    pointToLayer:(f,ll)=>L.circleMarker(ll,{
-      radius:7,color:'#10b981',fillColor:'#34d399',
-      fillOpacity:0.85,weight:2
-    }),
+    style:{color:'#10b981',weight:2,opacity:0.9,fillColor:'#34d399',fillOpacity:0.3},
+    pointToLayer:(f,ll)=>L.circleMarker(ll,{radius:7,color:'#10b981',fillColor:'#34d399',fillOpacity:0.85,weight:2}),
     onEachFeature:(f,l)=>{
       const name=f.properties.name||f.properties.Name||f.properties.NAME||'Wind Turbine/Farm';
       const cap=f.properties.capacity||f.properties.Capacity||'';
-      l.bindPopup(
-        `<div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:18px">💨</span>
-          <b>${name}</b>
-        </div>
-        <div style="margin-top:6px;font-size:11px;color:#94a3b8">
-          Type: Wind Turbine / Farm<br>
-          ${cap?`Capacity: ${cap} MW<br>`:''}
-          Kadapa District, AP
-        </div>`
-      );
+      l.bindPopup(`<div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">💨</span><b>${name}</b></div><div style="margin-top:6px;font-size:11px;color:#94a3b8">Type: Wind Turbine / Farm<br>${cap?`Capacity: ${cap} MW<br>`:''}Kadapa District, AP</div>`);
       l.on('mouseover',function(){this.setStyle({fillOpacity:0.55,weight:3});});
       l.on('mouseout',function(){this.setStyle({fillOpacity:0.3,weight:2});});
     }
@@ -429,23 +754,10 @@ function addWindTurbines(data){
 function addRECombined(data){
   if(!data)return;
   layers.recombined=L.geoJSON(data,{
-    style:{
-      color:'#a78bfa',weight:2.5,opacity:0.85,
-      fillColor:'#a78bfa',fillOpacity:0.08,
-      dashArray:'6,4'
-    },
+    style:{color:'#a78bfa',weight:2.5,opacity:0.85,fillColor:'#a78bfa',fillOpacity:0.08,dashArray:'6,4'},
     onEachFeature:(f,l)=>{
       const name=f.properties.name||f.properties.Name||f.properties.NAME||'RE Site';
-      l.bindPopup(
-        `<div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:18px">⚡</span>
-          <b>${name}</b>
-        </div>
-        <div style="margin-top:6px;font-size:11px;color:#94a3b8">
-          Combined Renewable Energy Boundary<br>
-          Kadapa District, AP
-        </div>`
-      );
+      l.bindPopup(`<div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">⚡</span><b>${name}</b></div><div style="margin-top:6px;font-size:11px;color:#94a3b8">Combined Renewable Energy Boundary<br>Kadapa District, AP</div>`);
     }
   }).addTo(map);
 }
@@ -471,9 +783,16 @@ async function loadAll(){
       fetchLayer('re-combined','RE Combined'),
     ]);
 
-  setStep('Rendering layers...');
+  // Store raw data for suitability calc
+  rawData = {
+    lulc, substations, roads,
+    powerlines: powerLines,
+    solarparks: solarParks,
+    windturbines: windTurbines,
+    recombined: reCombined
+  };
 
-  // Z-order: bottom → top
+  setStep('Rendering layers...');
   addLULC(lulc);
   addRoads(roads);
   addPowerLines(powerLines);
@@ -494,12 +813,29 @@ window.onload=function(){
   L.control.zoom({position:'topright'}).addTo(map);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     {attribution:'&copy; OpenStreetMap &copy; CARTO',maxZoom:19}).addTo(map);
+
   map.on('mousemove',e=>{
     document.getElementById('coordDisplay').textContent=`📍 ${e.latlng.lat.toFixed(4)}°N, ${e.latlng.lng.toFixed(4)}°E`;
   });
   map.on('zoomend',()=>{
     document.getElementById('zoomDisplay').textContent=`🔍 Zoom ${map.getZoom()}`;
   });
+
+  // Map click handler for suitability assessment
+  map.on('click',function(e){
+    if(!assessMode) return;
+    const {lat,lng}=e.latlng;
+
+    // Place/move marker
+    if(assessMarker) map.removeLayer(assessMarker);
+    assessMarker=L.circleMarker([lat,lng],{
+      radius:8,color:'#34d399',fillColor:'#34d399',
+      fillOpacity:0.9,weight:2
+    }).addTo(map);
+
+    runAssessment(lat,lng);
+  });
+
   loadAll();
 };
 </script>
