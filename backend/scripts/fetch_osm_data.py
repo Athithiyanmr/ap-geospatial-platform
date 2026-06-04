@@ -3,7 +3,6 @@ Step 2: Fetch OSM data clipped to your AOI (Kadapa district)
 
 Reads: backend/data/aoi_config.json  (created by convert_shapefiles.py)
 Outputs:
-  backend/data/aoi_boundary.geojson   (already exists)
   backend/data/power_lines.geojson
   backend/data/substations.geojson
   backend/data/roads.geojson
@@ -18,10 +17,9 @@ from pathlib import Path
 
 import geopandas as gpd
 import osmnx as ox
-from shapely.geometry import box
 
-DATA_DIR = Path(__file__).parent.parent / "data"
-CONFIG_FILE = DATA_DIR / "aoi_config.json"
+DATA_DIR      = Path(__file__).parent.parent / "data"
+CONFIG_FILE   = DATA_DIR / "aoi_config.json"
 BOUNDARY_FILE = DATA_DIR / "aoi_boundary.geojson"
 
 
@@ -32,25 +30,28 @@ def load_config() -> dict:
         sys.exit(1)
     with open(CONFIG_FILE) as f:
         cfg = json.load(f)
-    print(f"  AOI     : {cfg['name']}")
-    print(f"  BBox    : {cfg['bbox']}")
+    print(f"  AOI  : {cfg['name']}")
+    print(f"  BBox : {cfg['bbox']}")
     return cfg
 
 
 def load_aoi_geometry():
-    """Load the AOI polygon for spatial clipping."""
+    """Load AOI polygon — compatible with all geopandas versions."""
     gdf = gpd.read_file(str(BOUNDARY_FILE))
-    return gdf.geometry.union_all()   # single shapely geometry
+    # unary_union works on all geopandas versions; union_all requires >=0.14
+    try:
+        return gdf.geometry.union_all()
+    except AttributeError:
+        return gdf.geometry.unary_union
 
 
 def bbox_to_osmnx(bbox: list) -> tuple:
-    """Convert [W, S, E, N] → osmnx (N, S, E, W) tuple."""
+    """Convert [W, S, E, N] → osmnx (N, S, E, W)."""
     return (bbox[3], bbox[1], bbox[2], bbox[0])
 
 
 def save_geojson(gdf: gpd.GeoDataFrame, filename: str, label: str):
-    gdf = gdf.copy()
-    gdf = gdf.to_crs("EPSG:4326")
+    gdf = gdf.copy().to_crs("EPSG:4326")
     gdf["geometry"] = gdf["geometry"].simplify(tolerance=0.0005, preserve_topology=True)
     gdf = gdf[~gdf.geometry.is_empty & gdf.geometry.notna()]
     out = DATA_DIR / filename
@@ -65,7 +66,6 @@ def fetch_power_lines(bbox: list, aoi_geom):
     try:
         gdf = ox.features_from_bbox(*bbox_to_osmnx(bbox), tags=tags)
         gdf = gdf[gdf.geometry.geom_type.isin(["LineString", "MultiLineString"])].copy()
-        # Clip to AOI polygon
         gdf = gdf[gdf.geometry.intersects(aoi_geom)].copy()
         keep = [c for c in ["name", "voltage", "cables", "operator", "geometry"] if c in gdf.columns]
         gdf = gdf[keep].reset_index(drop=True)
@@ -86,7 +86,6 @@ def fetch_substations(bbox: list, aoi_geom):
     try:
         gdf = ox.features_from_bbox(*bbox_to_osmnx(bbox), tags=tags)
         gdf = gdf.copy()
-        # Convert polygons → centroids for point display
         gdf["geometry"] = gdf["geometry"].apply(
             lambda g: g.centroid if g.geom_type in ["Polygon", "MultiPolygon"] else g
         )
@@ -117,11 +116,11 @@ if __name__ == "__main__":
     print("  OSM Data Fetcher — AOI Clipped")
     print("=" * 50)
 
-    cfg = load_config()
-    bbox = cfg["bbox"]   # [W, S, E, N]
+    cfg     = load_config()
+    bbox    = cfg["bbox"]
     aoi_geom = load_aoi_geometry()
 
-    print(f"\n  Fetching OSM data within: {cfg['name']} boundary")
+    print(f"\n  Clipping all data to: {cfg['name']} boundary\n")
 
     fetch_power_lines(bbox, aoi_geom)
     fetch_substations(bbox, aoi_geom)
