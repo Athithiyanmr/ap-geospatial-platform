@@ -29,22 +29,30 @@ from shapely.geometry import shape, mapping
 import pystac_client
 import planetary_computer
 
-DATA_DIR    = Path(__file__).parent.parent / "data"
-CONFIG_FILE = DATA_DIR / "aoi_config.json"
+DATA_DIR      = Path(__file__).parent.parent / "data"
+CONFIG_FILE   = DATA_DIR / "aoi_config.json"
 BOUNDARY_FILE = DATA_DIR / "aoi_boundary.geojson"
-OUT_FILE    = DATA_DIR / "lulc_esa.geojson"
+OUT_FILE      = DATA_DIR / "lulc_esa.geojson"
 
 ESA_CLASSES = {
-    10:  {"label": "Tree cover",           "color": "#006400"},
-    20:  {"label": "Shrubland",             "color": "#ffbb22"},
-    30:  {"label": "Grassland",             "color": "#ffff4c"},
-    40:  {"label": "Cropland",              "color": "#f096ff"},
-    50:  {"label": "Built-up",              "color": "#fa0000"},
-    60:  {"label": "Bare / sparse veg",     "color": "#b4b4b4"},
-    80:  {"label": "Water bodies",          "color": "#0064c8"},
-    90:  {"label": "Herbaceous wetland",    "color": "#0096a0"},
-    95:  {"label": "Mangroves",             "color": "#00cf75"},
+    10:  {"label": "Tree cover",        "color": "#006400"},
+    20:  {"label": "Shrubland",         "color": "#ffbb22"},
+    30:  {"label": "Grassland",         "color": "#ffff4c"},
+    40:  {"label": "Cropland",          "color": "#f096ff"},
+    50:  {"label": "Built-up",          "color": "#fa0000"},
+    60:  {"label": "Bare / sparse veg", "color": "#b4b4b4"},
+    80:  {"label": "Water bodies",      "color": "#0064c8"},
+    90:  {"label": "Herbaceous wetland","color": "#0096a0"},
+    95:  {"label": "Mangroves",         "color": "#00cf75"},
 }
+
+
+def compat_union(gdf):
+    """Works on all geopandas versions — unary_union < 0.14, union_all >= 0.14."""
+    try:
+        return gdf.geometry.union_all()
+    except AttributeError:
+        return gdf.geometry.unary_union
 
 
 def load_config() -> dict:
@@ -62,16 +70,12 @@ def load_aoi_geometry():
 
 
 def fetch_tiles(bbox: list):
-    """Search ESA WorldCover tiles intersecting the AOI bbox."""
     print("  Connecting to Planetary Computer STAC...")
     catalog = pystac_client.Client.open(
         "https://planetarycomputer.microsoft.com/api/stac/v1",
         modifier=planetary_computer.sign_inplace,
     )
-    search = catalog.search(
-        collections=["esa-worldcover"],
-        bbox=bbox,   # [W, S, E, N]
-    )
+    search = catalog.search(collections=["esa-worldcover"], bbox=bbox)
     items = list(search.items())
     print(f"  Found {len(items)} ESA WorldCover tile(s) for AOI")
     if not items:
@@ -81,7 +85,6 @@ def fetch_tiles(bbox: list):
 
 
 def download_and_clip(items, bbox: list, aoi_geoms: list):
-    """Download tiles, merge, clip to AOI bbox."""
     tmp_files = []
     src_files = []
 
@@ -97,7 +100,7 @@ def download_and_clip(items, bbox: list, aoi_geoms: list):
     print("  Merging tiles...")
     merged_data, merged_transform = rasterio_merge(
         src_files,
-        bounds=(bbox[0], bbox[1], bbox[2], bbox[3])   # W, S, E, N
+        bounds=(bbox[0], bbox[1], bbox[2], bbox[3])
     )
     crs = src_files[0].crs
 
@@ -113,7 +116,6 @@ def download_and_clip(items, bbox: list, aoi_geoms: list):
 
 
 def vectorise_and_clip(data, transform, crs, aoi_gdf):
-    """Raster → vector polygons, clip to AOI, dissolve by class."""
     print("  Vectorising raster (this takes 2-5 min for district scale)...")
     features = []
     mask_arr = data != 0
@@ -133,18 +135,16 @@ def vectorise_and_clip(data, transform, crs, aoi_gdf):
 
     print(f"  Raw polygons generated: {len(features)}")
 
-    # Convert to GeoDataFrame
     gdf = gpd.GeoDataFrame.from_features(features, crs=crs)
     gdf = gdf.to_crs("EPSG:4326")
 
-    # Clip strictly to AOI polygon
+    # ✅ Fixed: compatible with all geopandas versions
     print("  Clipping to AOI boundary...")
-    aoi_union = aoi_gdf.geometry.union_all()
+    aoi_union = compat_union(aoi_gdf)
     gdf = gdf[gdf.geometry.intersects(aoi_union)].copy()
     gdf["geometry"] = gdf["geometry"].intersection(aoi_union)
     gdf = gdf[~gdf.geometry.is_empty].copy()
 
-    # Dissolve per class
     print("  Dissolving by LULC class...")
     gdf_dissolved = gdf.dissolve(by="class_value").reset_index()
     gdf_dissolved["class_label"] = gdf_dissolved["class_value"].map(
@@ -154,7 +154,6 @@ def vectorise_and_clip(data, transform, crs, aoi_gdf):
         lambda v: ESA_CLASSES.get(v, {}).get("color", "#888888")
     )
 
-    # Simplify for web display
     gdf_dissolved["geometry"] = gdf_dissolved["geometry"].simplify(
         tolerance=0.001, preserve_topology=True
     )
@@ -168,8 +167,8 @@ if __name__ == "__main__":
     print("  ESA WorldCover Fetcher — AOI Clipped")
     print("=" * 50)
 
-    cfg = load_config()
-    bbox = cfg["bbox"]   # [W, S, E, N]
+    cfg  = load_config()
+    bbox = cfg["bbox"]
     print(f"  AOI : {cfg['name']}")
     print(f"  BBox: {bbox}")
 
