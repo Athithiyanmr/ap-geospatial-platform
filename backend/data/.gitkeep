@@ -1,0 +1,10 @@
+# Place your GeoJSON data files here after running the fetch scripts.
+# Files in this directory are gitignored to avoid committing large datasets.
+#
+# Required files:
+#   ap_boundary.geojson
+#   ap_districts.geojson
+#   lulc_esa.geojson
+#   power_lines.geojson
+#   substations.geojson
+#   roads.geojson
